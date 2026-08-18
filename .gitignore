@@ -1,0 +1,10 @@
+# 运行时产物与缓存（不入库）
+.refs/
+temp/
+.zotero-annotations/
+.zotero-pdf/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/

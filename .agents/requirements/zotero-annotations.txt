@@ -1,0 +1,10 @@
+# zotero-annotations skill 依赖
+# 说明：只有上下文模式（--color/--ann-key/--before/--after/--fulltext/--export-pdf）需要 PyMuPDF；
+# 批注元数据、--list-attachments、--save-pdf 均只用 Python 标准库，无需安装依赖。
+#
+# 安装（在 .agents 根目录或任意目录执行）：
+#   python3 -m pip install -r .agents/requirements/zotero-annotations.txt
+#
+# 兼容性：脚本先 `import pymupdf`，失败后回退 `import fitz`；两者均为 PyMuPDF。
+# 实测版本：1.28.2；最小推荐版本 1.24.10（建议与项目已有依赖保持一致）。
+pymupdf==1.24.10
