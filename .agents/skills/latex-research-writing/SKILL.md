@@ -1,7 +1,7 @@
 ---
 name: latex-research-writing
 description: 把研究/调研/综述的最终成果写成极简、可移植、可编译的 LaTeX 项目：main.tex 总入口、chapters/ 按章拆分、refs.bib 统一维护 BibTeX 数据库，正文只用 \cite/\citep/\citet 做学术引用。当研究模式结束进入交付阶段、用户要求输出 LaTeX/可移植排版/学术引用/按章拆稿，或需要把 Markdown 研究笔记转成 LaTeX 时使用。
-whenToUse: 交付论文、综述、调研报告时；用户明确不要 Markdown；需要投稿、版本化或生成可编译 PDF；把既有 Markdown 草稿迁移为 LaTeX 时。
+whenToUse: 交付论文、综述、调研报告时；用户并未明确以Markdown交付；需要投稿、版本化或生成可编译 PDF；把既有 Markdown 草稿迁移为 LaTeX 时。
 ---
 
 # LaTeX 研究写作（Latex Research Writing）

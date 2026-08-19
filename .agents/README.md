@@ -2,9 +2,11 @@
 
 本目录是**字段无关、可整体迁移**的科研调研 agent 技能与记忆层。换项目 = 复制本目录 + 在 `memory/` 里按新领域填配置，机制层无需改动。
 
-## 一般调研工作流
+## 参考调研工作流
 
-web_search -> OA get (MUST! and MUST parallel for out of time ) -> analysis paper and Red-Black -> write 1 latex chapter -> analysis paper and Red-Black -> make v1 article -> Red-Black with peer-reviewer -> ESL IMRaD up up -> make full article for user -> tell user how to use it in chinese.
+web_search -> key words for Read-Black for OA get -> OA get (MUST! and MUST parallel for out of time ) -> analysis paper and Red-Black -> write 1 latex chapter -> analysis paper and Red-Black -> make v1 article -> Red-Black with peer-reviewer -> ESL IMRaD up up -> make full article for user -> tell user how to use it in chinese.
+
+特别注意！以上仅用于参考，而飞轮、门禁规则等在全流程下进行,必须避免由于框架造成的打卡模式
 
 ## 结构
 
