@@ -2,6 +2,10 @@
 
 本目录是**字段无关、可整体迁移**的科研调研 agent 技能与记忆层。换项目 = 复制本目录 + 在 `memory/` 里按新领域填配置，机制层无需改动。
 
+## 一般调研工作流
+
+web_search -> OA get (MUST! and MUST parallel for out of time ) -> analysis paper and Red-Black -> write 1 latex chapter -> analysis paper and Red-Black -> make v1 article -> Red-Black with peer-reviewer -> ESL IMRaD up up -> make full article for user -> tell user how to use it in chinese.
+
 ## 结构
 
 ```text
@@ -36,12 +40,12 @@
 
 ## 通用 vs 私有（迁移边界）
 
-| 层级 | 内容 | 迁移时 |
-|---|---|---|
-| `.agents/docs/` | 技能包**设计与规范**（字段无关、可跨学科复用） | ✅ 随技能包一起走 |
-| `.agents/skills/` + `.agents/requirements/` | 技能机制 + 依赖清单 | ✅ 随技能包一起走 |
-| `.agents/memory/open-article-get/`、`red-black-review/` | 检索配置卡、学习卡、私有武器 | 换项目时按需替换/清空 |
-| 项目专属实测/审计记录 | —— | ❌ 不放本模板；留在各自项目仓库 |
+| 层级                                                        | 内容                                                 | 迁移时                          |
+| ----------------------------------------------------------- | ---------------------------------------------------- | ------------------------------- |
+| `.agents/docs/`                                           | 技能包**设计与规范**（字段无关、可跨学科复用） | ✅ 随技能包一起走               |
+| `.agents/skills/` + `.agents/requirements/`             | 技能机制 + 依赖清单                                  | ✅ 随技能包一起走               |
+| `.agents/memory/open-article-get/`、`red-black-review/` | 检索配置卡、学习卡、私有武器                         | 换项目时按需替换/清空           |
+| 项目专属实测/审计记录                                       | ——                                                 | ❌ 不放本模板；留在各自项目仓库 |
 
 ## 迁移约定
 
