@@ -30,6 +30,7 @@
     ├── peer-reviewer/               # 同行评审（审稿人角色）
     ├── red-black-review/            # 红黑对抗打磨（含 L0 武器）
     ├── review-quality-analyzer/     # 综述质量提示词工程
+    ├── latex-research-writing/      # 极简 LaTeX 交付（main.tex + 拆章 + BibTeX，含脚本）
     └── zotero-annotations/          # Zotero 批注读取 + 附件拉取（含脚本）
 ```
 
@@ -56,3 +57,4 @@
 3. **`memory/` 只放配置、学习卡与私有武器**，不放检索历史、已下载 PDF、摘要缓存。
 4. **依赖**：有第三方依赖的 skill 在 `requirements/` 建对应 `*.txt` 并登记；纯标准库 skill 不建文件。
 5. 新增 skill 时保持单层 `<name>/SKILL.md`；脚本放 `<name>/scripts/`。
+6. **LaTeX 交付物**：`latex-research-writing` 生成的项目（`main.tex`、`chapters/`、`refs.bib`）放在项目根目录（如 `latex-project/`）或用户指定目录，不放 `.agents/`。

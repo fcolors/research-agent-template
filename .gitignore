@@ -4,6 +4,19 @@ temp/
 .zotero-annotations/
 .zotero-pdf/
 
+# LaTeX build artifacts
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+
 # Python
 __pycache__/
 *.py[cod]

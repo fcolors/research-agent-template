@@ -623,13 +623,15 @@ evidence-builder
 source-verifier
 red-black-review
 reverse-reproducibility
-research-writing
+latex-research-writing
 zotero-annotations
 web-search
 pdf-reader
 ```
 
 Skill 之间允许开放组合。
+
+写作交付格式由 `latex-research-writing` skill 封闭定义（`main.tex` + `chapters/` + `refs.bib`）；飞轮只负责在终止前调用该 skill 并满足其 `check` 门禁，不得把最终成果退回 Markdown 正文交付。
 
 被调用 Skill 内部的硬规则保持封闭，Runtime 不得临场重写。
 
