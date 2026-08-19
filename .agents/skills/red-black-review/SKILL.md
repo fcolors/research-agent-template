@@ -1,5 +1,5 @@
 ---
-name: paper-red-black-review
+name: red-black-review
 description: 面向论文阅读、文献综述与研究调研的红黑对抗打磨技能。以固定 L0 武器为底线，在需要提高交付质量时，对论断真实性、证据权威性、引文支撑关系和“只述原著”进行独立审查、守正修订与复审。若运行环境支持 subagent，则按本技能声明调用 red-reviewer 与 black-reviewer；否则由当前 agent 严格分角色顺序执行。
 whenToUse: 阅读论文并形成客观陈述；撰写或打磨综述/调研；交付前核验关键 claim、数字、引文与证据等级；用户要求“再审一遍、挑错、深核、只述原著、核对引用、提高严谨性”时。
 metadata:
