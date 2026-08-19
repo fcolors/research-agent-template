@@ -6,6 +6,7 @@ status: draft
 scope: generic-research
 machine_oriented: true
 language: zh-CN
+note: 本参考较长，建议使用gerp配合markdown多级标题按需读取
 ---
 
 # DSH 科研飞轮运行参考

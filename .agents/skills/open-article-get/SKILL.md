@@ -3,7 +3,6 @@ name: open-article-get
 description: 检索并获取合法开放获取（OA）的学术论文/期刊文章，优先确认 DOI 与正式发表版本；维护轻量本地元数据索引，避免重复检索与重复阅读。检索策略由 .agents/memory/open-article-get 提供，PDF 与长期文献记录存放在 .refs/oa-article/。
 whenToUse: 需要根据关键词/题名/作者/DOI/arXiv ID 找到论文、核验正式发表信息、判断可合法获取到 abstract/preprint/published 哪一层、或下载合法 OA PDF 时。
 ---
-
 # open-article-get
 
 用于 open scholarly article retrieval。目标不是构建复杂文献管理系统，而是稳定回答：
@@ -14,6 +13,8 @@ whenToUse: 需要根据关键词/题名/作者/DOI/arXiv ID 找到论文、核�
 4. 当前合法可获取层级：abstract / preprint / published？
 
 优先合法 OA，不绕过付费墙。
+
+> 特别注意：优先选择后台运行模式，避免思维链阻塞。在不降低审查质量的情况下，也尽量减少使用subagent实现的方法。
 
 ## Boundary
 

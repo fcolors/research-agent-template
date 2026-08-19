@@ -12,6 +12,10 @@
 | `dsh-research-flywheel-reference.md` | 科研飞轮运行参考（任务级控制机制、COMPLETE/PARTIAL/BLOCKED 终止协议） |
 | `dsh-research-gates-reference.md` | 科研门禁运行参考（防装读/防杜撰/claim 可追溯/证据链机器可消费结构） |
 
+## 阅读方法
+
+docs文件中可能会有较大文件，建议使用grep查看markdown文件各个章节的小标题，按需加载
+
 ## 迁移注意事项
 
 1. `.agents/skills/` 内的脚本都以 skill 根目录为基准执行，不依赖仓库绝对路径。

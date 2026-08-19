@@ -6,8 +6,8 @@ status: draft
 scope: generic-research
 machine_oriented: true
 language: zh-CN
+note: 本参考较长，建议使用gerp配合markdown多级标题按需读取
 ---
-
 # DSH 科研门禁运行参考
 
 ## 0. 用途
@@ -29,6 +29,8 @@ Gate 的目标：
 本文件只定义通用机制。
 
 领域术语、source 清单、近年优先窗口、authority 偏好、Zotero collection、审稿词表等必须通过配置提供，不得硬编码进通用 Gate 机制。
+
+> 特别注意: 构建的Gate检查脚本应当有在后台运行的能力，避免干扰主agent。在不降低审查质量的情况下，也尽量减少使用subagent实现的方法。
 
 ---
 
