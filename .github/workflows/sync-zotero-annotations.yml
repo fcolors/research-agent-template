@@ -27,27 +27,34 @@ jobs:
           repository: fcolors/zotero-annotations
           path: source
 
-      - name: 只同步 zotero-annotations（同名覆盖，不动其它 skill）
+      - name: 覆盖同步 skill 到 .agents/skills/
         run: |
           set -eu
-          # 只针对这一个目录：先清掉旧副本，再整目录拷入
           rm -rf "template/.agents/skills/zotero-annotations"
           cp -a "source/skills/zotero-annotations" "template/.agents/skills/zotero-annotations"
-          # 清掉可能的 __pycache__ / .pyc
           find "template/.agents/skills/zotero-annotations" -name __pycache__ -type d -prune -exec rm -rf {} +
           find "template/.agents/skills/zotero-annotations" -name '*.pyc' -delete
-          echo "目标目录:" && ls "template/.agents/skills/zotero-annotations"
+          echo "已同步:" && ls "template/.agents/skills/zotero-annotations"
 
-      - name: 仅当 zotero-annotations 有变更才提交并推送
+      - name: 提交并推送（先取远端最新，避免 non-fast-forward 被拒）
         run: |
           set -eu
           cd template
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet HEAD -- .agents/skills/zotero-annotations; then
+
+          # 以远端 main 为准，丢弃本地任何残留提交（幂等重放）
+          git fetch origin main
+          git reset --hard origin/main
+          rm -rf .agents/skills/zotero-annotations
+          cp -a ../source/skills/zotero-annotations .agents/skills/zotero-annotations
+          find .agents/skills/zotero-annotations -name __pycache__ -type d -prune -exec rm -rf {} +
+          find .agents/skills/zotero-annotations -name '*.pyc' -delete
+
+          git add .agents/skills/zotero-annotations
+          if git diff --cached --quiet; then
             echo "无变更，跳过提交"
           else
-            git add .agents/skills/zotero-annotations
             git commit -m "sync(zotero-annotations): 每6小时从独立仓库同步 skill"
             git push
           fi
