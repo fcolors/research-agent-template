@@ -1,0 +1,53 @@
+name: sync-zotero-annotations
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"   # 每 6 小时整点
+  workflow_dispatch:        # 支持手动触发
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-zotero-annotations
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出模板仓库
+        uses: actions/checkout@v4
+        with:
+          path: template
+
+      - name: 检出源仓库（独立 skill 仓库，只读）
+        uses: actions/checkout@v4
+        with:
+          repository: fcolors/zotero-annotations
+          path: source
+
+      - name: 只同步 zotero-annotations（同名覆盖，不动其它 skill）
+        run: |
+          set -eu
+          # 只针对这一个目录：先清掉旧副本，再整目录拷入
+          rm -rf "template/.agents/skills/zotero-annotations"
+          cp -a "source/skills/zotero-annotations" "template/.agents/skills/zotero-annotations"
+          # 清掉可能的 __pycache__ / .pyc
+          find "template/.agents/skills/zotero-annotations" -name __pycache__ -type d -prune -exec rm -rf {} +
+          find "template/.agents/skills/zotero-annotations" -name '*.pyc' -delete
+          echo "目标目录:" && ls "template/.agents/skills/zotero-annotations"
+
+      - name: 仅当 zotero-annotations 有变更才提交并推送
+        run: |
+          set -eu
+          cd template
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet HEAD -- .agents/skills/zotero-annotations; then
+            echo "无变更，跳过提交"
+          else
+            git add .agents/skills/zotero-annotations
+            git commit -m "sync(zotero-annotations): 每6小时从独立仓库同步 skill"
+            git push
+          fi
