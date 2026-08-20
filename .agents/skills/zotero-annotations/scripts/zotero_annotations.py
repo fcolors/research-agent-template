@@ -1,33 +1,51 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-zotero_annotations.py — 读取 Zotero 文献 PDF 批注（高亮/下划线/笔记），按颜色分组输出。
-增量模式：批注缓存到 ~/.cache/zotero-annotations/，第二次起只打印新增/更新的批注。
+zotero_annotations.py — 读取 Zotero 文献 PDF 批注（高亮/下划线/笔记），按颜色分组输出；
+增量模式缓存到 ~/.cache/zotero-annotations/，第二次起只打印新增/更新的批注。
+与 zotero-annotations-cli 功能一致（元数据 + 上下文 + 全文/PDF 导出），区别仅在于
+本脚本直接运行 .py，而 CLI 打包成独立可执行文件。
 
-纯标准库，直接访问 Zotero 本地 API (http://127.0.0.1:23119)，只读、免 key，不写库。
-严格范围：只读批注元数据；绝不取全文(fulltext)、不取附件 file-url、不下载/解析 PDF、
-不调用插件 zotero.py。放行钩子白名单匹配的就是本脚本，保持工作流单一才无审批弹窗。
+单一命令，自动判定模式：
+  - 只给基础参数 → 元数据模式（纯标准库，不读 PDF）。
+  - 给了上下文参数（--color/--ann-key/--before/--after/--fulltext/--export-pdf）
+    中任一 → 上下文模式，经 Zotero PDF Bridge 的 /pdf-bridge/<itemKey> 只读获取
+    PDF 原文，按批注精确位置（annotationPosition）提取高亮处前后 N 句。需 PyMuPDF。
+
+全程只读（Zotero 本地 API 取元数据/批注；PDF 原文经 PDF Bridge 只读获取），
+绝不写库、不改 PDF、不下载、不访问 Windows 文件系统（无 /mnt、无 C:、无 ~/Zotero/storage）。
 
 用法：
   python3 zotero_annotations.py --query "示例标题" [--collection "示例合集"]
   python3 zotero_annotations.py --key ASDFGHJK
   python3 zotero_annotations.py --key ASDFGHJK --full     # 忽略缓存，全量输出
-  python3 zotero_annotations.py --query "..." --json
+  python3 zotero_annotations.py --key ASDFGHJK --color red --before 2 --after 2
+  python3 zotero_annotations.py --key ASDFGHJK --fulltext --export-pdf
 
 参数：
-  --query TEXT      标题子串（大小写不敏感；Unicode 破折号已归一化）
-  --collection TEXT 集合名（精确、大小写不敏感）；缺省搜索全库
-  --key KEY         Zotero item key，直接定位，最快最精确
-  --full            忽略缓存，全量输出
-  --json            输出原始 JSON（含 delta 信息）
-  --no-color        不按颜色分组
-  --cache-dir PATH  显式指定缓存目录
+  定位（必选其一）：
+    --query TEXT      标题子串（大小写不敏感；Unicode 破折号已归一化）
+    --collection TEXT 集合名（精确、大小写不敏感）；与 --query 连用
+    --key KEY         Zotero item key，直接定位，最快最精确
+  通用：
+    --json            输出原始 JSON（含 delta/reading/contexts）
+    --cache-dir PATH  显式指定缓存目录
+  元数据模式：
+    --full            忽略缓存，全量输出
+    --no-color        不按颜色分组
+  上下文模式（任给其一即进入；需 PyMuPDF）：
+    --color NAME|HEX   只处理指定颜色批注（可多次：red / #ff6666）
+    --ann-key KEY      只处理指定批注 key（可多次）
+    --before N / --after N   上下文前/后句数，默认 2/2（共 5 句）
+    --fulltext         导出全文文本到 <cache>/<key>.txt
+    --export-pdf       导出 PDF 副本到 <cache>/<key>.pdf
 
 缓存目录优先级：--cache-dir > 当前工作目录下 .zotero-annotations/ > 系统 temp。
 无论落在哪，脚本都会在输出里给出 cache= 路径；请把缓存位置告知用户。
 
 退出码：0 成功，1 失败。具体错误类型见 stderr 的 `ERROR <HTTP码> <LABEL>: 文字`，
-HTTP 风格码如 503 SERVICE_UNAVAILABLE / 404 NOT_FOUND / 300 MULTIPLE_CHOICES / 422 UNPROCESSABLE_ENTITY。
+HTTP 风格码如 503 SERVICE_UNAVAILABLE / 404 NOT_FOUND / 300 MULTIPLE_CHOICES /
+422 UNPROCESSABLE_ENTITY / 404 PDF_NOT_FOUND / 500 INVALID_PDF / 500 DEPENDENCY_MISSING。
 
 阅读定位（推测当前读到哪，方便 AGENT 快速定位，无需拉全文）：
   - 方法1 新增分布：本次新增/更新批注的页码分布与范围（用户最近在读的区间）。
@@ -37,15 +55,20 @@ HTTP 风格码如 503 SERVICE_UNAVAILABLE / 404 NOT_FOUND / 300 MULTIPLE_CHOICES
 """
 
 import argparse
+import base64
 import datetime
 import json
 import os
+import re
 import sys
 import tempfile
 import urllib.request
 import urllib.parse
 
 BASE = "http://127.0.0.1:23119"
+
+# Zotero PDF Bridge 只读 PDF 端点（需要 PDF 原文时才访问，元数据/批注模式不要求）。
+BRIDGE_BASE = BASE + "/pdf-bridge"
 
 # Zotero 内置批注颜色（hex -> 友好名）。
 COLOR_NAMES = {
@@ -57,6 +80,18 @@ COLOR_NAMES = {
     "#ff00ff": "magenta",
     "#000000": "black",
 }
+
+try:
+    import pymupdf as fitz  # 新版包名；旧版 fitz 亦可用（上下文模式才需要）
+except ImportError:
+    try:
+        import fitz  # type: ignore
+    except ImportError:
+        fitz = None  # type: ignore
+
+PLACEHOLDER = "\uE000"  # 私有区字符，用于分句时保护缩写点号
+
+PREFIX = "[zotero-annotations]"
 
 
 def api(path, params=None):
@@ -70,7 +105,7 @@ def api(path, params=None):
 def fail(code, label, text):
     """统一错误输出：文字直接可读，并带 HTTP 风格错误码（如 404 NOT_FOUND）。
     进程退出码统一为 1（HTTP 码 >255 会被 shell 截断，故不放退出码里）。"""
-    print(f"[zotero-annotations] ERROR {code} {label}: {text}", file=sys.stderr)
+    print(f"{PREFIX} ERROR {code} {label}: {text}", file=sys.stderr)
     sys.exit(1)
 
 
@@ -80,7 +115,7 @@ def check_status():
         api("/api/schema")  # 真实 JSON 端点；根 /api/ 是纯文本
         return True
     except Exception as exc:  # noqa: BLE001
-        print(f"[zotero-annotations] 无法连接 Zotero 本地 API: {exc}", file=sys.stderr)
+        print(f"{PREFIX} 无法连接 Zotero 本地 API: {exc}", file=sys.stderr)
         fail(503, "SERVICE_UNAVAILABLE",
              "Zotero 本地 API 不可用。请在 Zotero 中开启本地服务："
              "Settings(Preferences) -> Advanced -> Server -> "
@@ -136,10 +171,7 @@ def find_collection(name):
         fail(404, "NOT_FOUND", f"集合 '{name}' 不存在。可用集合："
              + (", ".join(available) if available else "(无)"))
     if len(matches) > 1:
-        print(
-            f"[zotero-annotations] 存在多个同名集合 '{name}'，使用第一个。",
-            file=sys.stderr,
-        )
+        print(f"{PREFIX} 存在多个同名集合 '{name}'，使用第一个。", file=sys.stderr)
     return matches[0]
 
 
@@ -224,6 +256,46 @@ def fetch_attachment_pdfs(item_key):
         if k.get("data", {}).get("itemType") == "attachment"
         and k.get("data", {}).get("contentType") == "application/pdf"
     ]
+
+
+def fetch_pdf_bytes(item_key):
+    """通过 Zotero PDF Bridge 只读获取 PDF 字节（base64 文本传输）。
+    用 parent item key（Bridge 亦接受 attachment key）。找不到/未安装时 fail。"""
+    url = BRIDGE_BASE + "/" + urllib.parse.quote(item_key)
+    try:
+        with urllib.request.urlopen(url, timeout=30) as resp:
+            encoded = resp.read()
+        data = base64.b64decode(encoded, validate=True)
+    except Exception as exc:  # noqa: BLE001
+        fail(404, "PDF_NOT_FOUND",
+             f"无法通过 Zotero PDF Bridge 获取 PDF: {exc}\n"
+             "Zotero PDF Bridge is required for PDF access. "
+             "Install zotero-pdf-bridge.xpi from this repository's GitHub Releases.")
+    if not data.startswith(b"%PDF-"):
+        fail(500, "INVALID_PDF", "Zotero PDF Bridge 返回的数据不是有效 PDF")
+    return data
+
+
+def locate_item(args):
+    """按 --key / --query [--collection] 定位文献条目，返回 item data。"""
+    if args.key:
+        return api(f"/api/users/0/items/{args.key}", {"format": "json"})["data"]
+    if args.collection:
+        col = find_collection(args.collection)
+        if not col:
+            sys.exit(1)
+        candidates = find_item_by_title(items_in_collection(col["key"]), args.query)
+    else:
+        candidates = find_item_by_title(top_items(), args.query)
+    if not candidates:
+        fail(404, "NOT_FOUND", f"没有匹配标题 '{args.query}' 的条目")
+    if len(candidates) > 1:
+        for c in candidates:
+            print(f"  - {c['key']}  {c.get('title')}", file=sys.stderr)
+        fail(300, "MULTIPLE_CHOICES",
+             f"标题 '{args.query}' 命中 {len(candidates)} 条，有歧义。"
+             "请用 --key 精确定位或细化 --query。")
+    return candidates[0]
 
 
 # ---------------------------------------------------------------------------
@@ -366,15 +438,167 @@ def render_rows(rows, no_color):
             print_ann_block(d)
 
 
+# ---------------------------------------------------------------------------
+# 上下文提取（基于批注精确位置 annotationPosition）
+# ---------------------------------------------------------------------------
+
+def conv_rect(page, r):
+    """Zotero annotationPosition 的 rect 是 PDF 原生坐标（左下原点）；
+    转成 PyMuPDF 的左上原点坐标系。"""
+    H = page.rect.height
+    x0, y0, x1, y1 = r
+    return fitz.Rect(x0, H - y1, x1, H - y0)
+
+
+def exact_phrase(page, rects):
+    """按批注 rect 逐块取词并拼接，得到高亮的精确文本。"""
+    frags = [page.get_textbox(conv_rect(page, r)).strip() for r in rects]
+    return " ".join(f for f in frags if f)
+
+
+def split_sentences(text):
+    """粗略分句：句号/问号/叹号（含其后引用编号如 [2]）+ 空白 + 大写/数字 开头为新句。
+    先保护常见缩写（e.g., Fig., et al., 数字点号）避免误切。"""
+    def protect(m):
+        return m.group(0).replace(".", PLACEHOLDER)
+
+    t = re.sub(
+        r"\b(?:e\.g|i\.e|et al|etc|vs|cf|approx|al|Fig|Figs|Figure|Ref|Refs|"
+        r"Eq|Eqs|No|Nos|Dr|Prof|Mr|Mrs|Ms|St|Mt|Jan|Feb|Mar|Apr|Jun|Jul|Aug|"
+        r"Sep|Oct|Nov|Dec|U\.S|U\.K|Ph\.D|Inc|Ltd|Corp|Co)\.",
+        protect,
+        text,
+        flags=re.IGNORECASE,
+    )
+    parts = re.split(
+        r"(?<=[.!?])\s*(?:\[[0-9][^\]\n]{0,15}\]\s*)*(?=[A-Z0-9\"'“])", t
+    )
+    return [p.replace(PLACEHOLDER, ".").strip() for p in parts if p.strip()]
+
+
+def page_lines(page):
+    """取页内所有文本行 (bbox, 归一化文本)，用于定位锚点行。"""
+    out = []
+    for block in page.get_text("dict")["blocks"]:
+        if block.get("type") != 0:
+            continue
+        for line in block["lines"]:
+            txt = "".join(s["text"] for s in line["spans"])
+            txt = re.sub(r"\s+", " ", txt).strip()
+            if txt:
+                out.append((fitz.Rect(line["bbox"]), txt))
+    return out
+
+
+def anchor_line_text(page, rect):
+    """找与高亮 rect 垂直重叠面积最大的那一行，返回其文本（定位锚点）。"""
+    best_txt, best_ov = None, -1
+    for bbox, txt in page_lines(page):
+        ov = rect & bbox
+        if ov.is_empty:
+            continue
+        area = (ov.x1 - ov.x0) * (ov.y1 - ov.y0)
+        if area > best_ov:
+            best_ov, best_txt = area, txt
+    return best_txt
+
+
+def find_phrase_offset(ntext, nphrase, anchor=None):
+    """在页文本里定位短语偏移。若有锚点行文本，优先找锚点附近的那次出现。"""
+    if anchor:
+        ai = ntext.find(anchor)
+        if ai >= 0:
+            lo, hi = max(0, ai - len(anchor)), min(len(ntext), ai + len(anchor) * 2)
+            idx = ntext.lower().find(nphrase.lower(), lo, hi)
+            if idx >= 0:
+                return idx
+    return ntext.lower().find(nphrase.lower())
+
+
+def context_window(page_text, phrase, before, after, anchor=None):
+    """在页文本里定位 phrase，返回 (句子列表, 命中句索引, (start,end))。"""
+    ntext = re.sub(r"\s+", " ", page_text).strip()
+    nphrase = re.sub(r"\s+", " ", phrase).strip()
+    if not nphrase:
+        return None, None, None
+    idx = find_phrase_offset(ntext, nphrase, anchor)
+    if idx < 0:
+        return None, None, None
+    sents = split_sentences(ntext)
+    pos = 0
+    offsets = []
+    for s in sents:
+        st = ntext.find(s, pos)
+        if st < 0:
+            st = pos
+        offsets.append((st, st + len(s)))
+        pos = st + len(s)
+    target = None
+    for i, (st, en) in enumerate(offsets):
+        if st <= idx < en:
+            target = i
+            break
+    if target is None:
+        return None, None, None
+    lo = max(0, target - before)
+    hi = min(len(sents), target + after + 1)
+    return sents, target, (lo, hi)
+
+
+def extract_fulltext(doc):
+    """整篇 PDF 文本，页间用分隔行。"""
+    parts = []
+    for i, page in enumerate(doc):
+        parts.append(f"\n\n===== PAGE {i + 1} =====\n\n" + page.get_text("text"))
+    return "".join(parts)
+
+
+def print_ctx(r_, before, after):
+    print(f"<<<CTX key={r_['key']} color={color_name(r_['color'])} page={r_['page']}")
+    print(f"PHRASE: {r_['phrase']}")
+    if r_.get("comment"):
+        print(f"COMMENT: {r_['comment']}")
+    if r_.get("sentences"):
+        sents = r_["sentences"]
+        tgt = r_["target_idx"]
+        lo, hi = r_["window"]
+        for i in range(lo, hi):
+            mark = ">>>" if i == tgt else "   "
+            rel = i - tgt
+            label = "S0" if rel == 0 else f"S{'+' if rel > 0 else ''}{rel}"
+            print(f"  {mark} [{label}] {sents[i]}")
+    else:
+        print("  (无法在页文本中定位该短语；可能是跨栏排版或文本为图片)")
+    print(">>>CTX")
+
+
+# ---------------------------------------------------------------------------
+# 主流程（单命令，自动判定模式）
+# ---------------------------------------------------------------------------
+
+def is_context_requested(args):
+    """是否进入上下文模式：给了上下文参数中的任一。"""
+    return bool(args.color or args.ann_key or args.fulltext or args.export_pdf)
+
+
 def main():
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(description="Zotero 批注工具：默认读元数据；给上下文参数即读原文上下文")
     ap.add_argument("--query")
     ap.add_argument("--collection")
     ap.add_argument("--key")
-    ap.add_argument("--full", action="store_true")
+    # 通用
     ap.add_argument("--json", action="store_true")
-    ap.add_argument("--no-color", action="store_true")
     ap.add_argument("--cache-dir")
+    # 元数据模式
+    ap.add_argument("--full", action="store_true")
+    ap.add_argument("--no-color", action="store_true")
+    # 上下文模式（任给其一即进入）
+    ap.add_argument("--color", action="append", default=[])
+    ap.add_argument("--ann-key", action="append", default=[])
+    ap.add_argument("--before", type=int, default=2)
+    ap.add_argument("--after", type=int, default=2)
+    ap.add_argument("--fulltext", action="store_true")
+    ap.add_argument("--export-pdf", action="store_true")
     args = ap.parse_args()
 
     if not (args.key or args.query):
@@ -383,41 +607,29 @@ def main():
     if not check_status():
         sys.exit(1)  # 防御性兜底；check_status 失败时已 fail(503)
 
-    # 1) 定位文献
-    if args.key:
-        item = api(f"/api/users/0/items/{args.key}", {"format": "json"})["data"]
+    if is_context_requested(args):
+        cmd_context(args)
     else:
-        if args.collection:
-            col = find_collection(args.collection)
-            if not col:
-                sys.exit(1)  # find_collection 失败时已 fail(404)
-            candidates = find_item_by_title(items_in_collection(col["key"]), args.query)
-        else:
-            candidates = find_item_by_title(top_items(), args.query)
-        if not candidates:
-            fail(404, "NOT_FOUND", f"没有匹配标题 '{args.query}' 的条目")
-        if len(candidates) > 1:
-            for c in candidates:
-                print(f"  - {c['key']}  {c.get('title')}", file=sys.stderr)
-            fail(300, "MULTIPLE_CHOICES",
-                 f"标题 '{args.query}' 命中 {len(candidates)} 条，有歧义。"
-                 "请用 --key 精确定位或细化 --query。")
-        item = candidates[0]
+        cmd_annotate(args)
 
-    # 2) PDF 附件
+
+# ---------------------------------------------------------------------------
+# 元数据模式
+# ---------------------------------------------------------------------------
+
+def cmd_annotate(args):
+    item = locate_item(args)
     pdfs = fetch_attachment_pdfs(item["key"])
     if not pdfs:
         fail(422, "UNPROCESSABLE_ENTITY",
              f"条目 {item['key']} 没有 PDF 附件，无法读取批注")
 
-    # 3) 挂在附件上的批注
     pdf_keys = {p["key"] for p in pdfs}
     raw = [a for a in all_annotations() if a["data"].get("parentItem") in pdf_keys]
     versions = {a["data"]["key"]: a.get("version") for a in raw}
     annos = [a["data"] for a in raw]
     annos.sort(key=page_key)
 
-    # 4) 增量计算 + 缓存
     cache_dir = resolve_cache_dir(args.cache_dir)
     old_cache, cache_path = load_cache(cache_dir, item["key"])
     old = (old_cache or {}).get("annotations", {})
@@ -460,7 +672,6 @@ def main():
         ))
         return
 
-    # 5) 人类可读输出
     print("=" * 72)
     print("Title :", item.get("title"))
     print("Author:", creator_string(item))
@@ -474,12 +685,11 @@ def main():
     reading_txt = "none"
     if reading.get("method2_farthest"):
         reading_txt = f"page{reading['method2_farthest']['page']}"
-    print(f"STATUS: OK | mode={mode} | annotations={len(annos)} "
+    print(f"STATUS: OK | mode=annotate | mode2={mode} | annotations={len(annos)} "
           f"| new_updated={len(new_changed)} | removed={len(removed)} "
           f"| reading={reading_txt} | cache={cache_path}")
     print("=" * 72)
 
-    # 阅读定位：两种方法推测当前读到哪，方便 AGENT 快速定位，无需拉取全文。
     render_reading(reading, old_reading)
 
     if not args.full and had_cache:
@@ -496,6 +706,140 @@ def main():
         else:
             print(f"首次读取，共 {len(annos)} 条")
         render_rows(annos, args.no_color)
+
+
+# ---------------------------------------------------------------------------
+# 上下文模式
+# ---------------------------------------------------------------------------
+
+def cmd_context(args):
+    if fitz is None:
+        fail(500, "DEPENDENCY_MISSING",
+             "本机未安装 PyMuPDF，无法读取 PDF 原文。直接跑 .py 时请先执行："
+             "python3 -m pip install -r <skill目录>/requirements.txt")
+
+    item = locate_item(args)
+    pdfs = fetch_attachment_pdfs(item["key"])
+    if not pdfs:
+        fail(422, "UNPROCESSABLE_ENTITY", f"条目 {item['key']} 没有 PDF 附件")
+
+    # 通过 Zotero PDF Bridge 只读获取 PDF 字节（用 parent item key，Bridge 亦接受 attachment key）。
+    pdf_bytes = fetch_pdf_bytes(item["key"])
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    pdf_source = BRIDGE_BASE + "/" + urllib.parse.quote(item["key"])
+
+    pdf_keys = {p["key"] for p in pdfs}
+    raw = [a for a in all_annotations() if a["data"].get("parentItem") in pdf_keys]
+    annos = [a["data"] for a in raw]
+
+    def color_to_hex(c):
+        c = c.lower().lstrip("#")
+        for h, name in COLOR_NAMES.items():
+            if name == c:
+                return h.lstrip("#")
+        return c
+    wanted_colors = {color_to_hex(c) for c in args.color}
+
+    def keep(a):
+        if args.ann_key and a["key"] not in set(args.ann_key):
+            return False
+        if args.color:
+            col = (a.get("annotationColor") or "").lstrip("#").lower()
+            if col not in wanted_colors:
+                return False
+        return True
+    annos = [a for a in annos if keep(a)]
+
+    results = []
+    for a in annos:
+        pos = a.get("annotationPosition")
+        page_label = a.get("annotationPageLabel")
+        try:
+            info = json.loads(pos) if pos else {}
+            page_idx = int(info["pageIndex"])
+            rects = info.get("rects", [])
+        except (ValueError, KeyError, TypeError):
+            info, page_idx, rects = {}, None, []
+        if rects and page_idx is not None and page_idx < doc.page_count:
+            page = doc[page_idx]
+            phrase = exact_phrase(page, rects) or a.get("annotationText") or ""
+            anchor = anchor_line_text(page, conv_rect(page, rects[0]))
+            sents, tgt, (lo, hi) = context_window(
+                page.get_text("text"), phrase, args.before, args.after, anchor
+            )
+        else:
+            phrase = a.get("annotationText") or ""
+            sents, tgt, lo, hi, page = None, None, None, None, None
+        results.append({
+            "key": a["key"],
+            "color": a.get("annotationColor"),
+            "page": page_label,
+            "text": a.get("annotationText"),
+            "comment": a.get("annotationComment"),
+            "phrase": phrase,
+            "page_index": page_idx,
+            "sentences": sents,
+            "target_idx": tgt,
+            "window": (lo, hi) if sents else None,
+            "rects": rects,
+        })
+
+    cache_dir = resolve_cache_dir(args.cache_dir)
+    os.makedirs(cache_dir, exist_ok=True)
+    txt_path, pdf_out = None, None
+    if args.fulltext:
+        txt_path = os.path.join(cache_dir, item["key"] + ".txt")
+        with open(txt_path, "w", encoding="utf-8") as f:
+            f.write(extract_fulltext(doc))
+    if args.export_pdf:
+        pdf_out = os.path.join(cache_dir, item["key"] + ".pdf")
+        with open(pdf_out, "wb") as f:
+            f.write(pdf_bytes)
+
+    if args.json:
+        print(json.dumps({
+            "item": {
+                "key": item["key"],
+                "title": item.get("title"),
+                "creators": creator_string(item),
+                "year": item.get("date", ""),
+            },
+            "pdf_source": pdf_source,
+            "exports": {"fulltext_txt": txt_path, "pdf_copy": pdf_out},
+            "contexts": results,
+        }, ensure_ascii=False, indent=2))
+        return
+
+    print("=" * 72)
+    print("Title :", item.get("title"))
+    print("Author:", creator_string(item))
+    print("PDF   :", pdf_source)
+    print(f"STATUS: OK | mode=context | item={item['key']} | contexts={len(results)} "
+          f"| before={args.before} after={args.after} "
+          f"| fulltext_txt={txt_path or 'none'} | pdf_copy={pdf_out or 'none'}")
+    print("=" * 72)
+
+    if not args.no_color:
+        groups = {}
+        for r_ in results:
+            groups.setdefault(r_["color"], []).append(r_)
+        ordered = sorted(groups.items(), key=lambda kv: (kv[0] != "#ff6666", kv[0] or ""))
+        ordered = [(c, rs) for c, rs in ordered if rs]
+        for color, rs in ordered:
+            print(f"\n### 颜色 {color_name(color)} ({color}) — {len(rs)} 条")
+            for r_ in rs:
+                print_ctx(r_, args.before, args.after)
+    else:
+        for r_ in results:
+            print_ctx(r_, args.before, args.after)
+
+    if not results:
+        print("（无匹配批注）")
+
+    if txt_path:
+        print(f"\n全文已导出: {txt_path}")
+    if pdf_out:
+        print(f"PDF 副本已导出: {pdf_out}（按 item key 命名，可对接 PDF 阅读插件）")
 
 
 if __name__ == "__main__":
