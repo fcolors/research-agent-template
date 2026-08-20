@@ -6,7 +6,7 @@
 
 web_search -> key words for Read-Black for OA get -> OA get (MUST! and MUST parallel for out of time ) -> analysis paper and Red-Black -> write 1 latex chapter -> analysis paper and Red-Black -> make v1 article -> Red-Black with peer-reviewer -> ESL IMRaD up up -> make full article for user -> tell user how to use it in chinese.
 
-特别注意！以上仅用于参考，而飞轮、门禁规则等在全流程下进行,必须避免由于框架造成的打卡模式
+特别注意！以上仅用于参考，而飞轮、门禁规则等在全流程下进行,必须避免由于框架造成的打卡模式(只按流程办事，没有真正给出有效产出，飞轮门禁的正确使用则是其保证）
 
 ## 结构
 
