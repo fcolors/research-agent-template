@@ -1,5 +1,9 @@
 # Research Agent Template
 
+<p align="center">
+  <img src="docs/banner.png" alt="banner" width="100%">
+</p>
+
 一个**可迁移的科研调研 agent 技能包**模板。把论文检索、批注取证、红黑对抗审稿、综述质量提示词工程等能力，封装成字段无关、可组合的 DSH skill，整体复制到任意研究项目即可使用。
 
 ## 这是什么
