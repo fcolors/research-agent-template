@@ -1,0 +1,53 @@
+name: sync-read-and-express
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-read-and-express
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out template
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: template
+      - name: Check out source skill (read only)
+        uses: actions/checkout@v4
+        with:
+          repository: fcolors/read-and-express
+          ref: main
+          path: source
+          persist-credentials: false
+      - name: Mirror skill and its MIT license
+        shell: bash
+        run: |
+          set -eu
+          test -s source/skills/read-and-express/SKILL.md
+          test -s source/skills/read-and-express/LICENSE
+          mkdir -p template/.agents/skills/read-and-express
+          rsync -a --delete --exclude='__pycache__/' --exclude='*.pyc' \
+            source/skills/read-and-express/ template/.agents/skills/read-and-express/
+      - name: Commit changed mirror
+        working-directory: template
+        shell: bash
+        run: |
+          set -eu
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- .agents/skills/read-and-express
+          if git diff --cached --quiet; then
+            echo "No changes"
+          else
+            git commit -m "chore: 同步 read-and-express 技能"
+            git push origin HEAD:main
+          fi

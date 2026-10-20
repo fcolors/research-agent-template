@@ -37,6 +37,7 @@ web_search -> key words for Read-Black for OA get -> OA get (MUST! and MUST para
     ├── red-black-review/            # 红黑对抗打磨（含 L0 武器）
     ├── review-quality-analyzer/     # 综述质量提示词工程
     ├── latex-research-writing/      # 极简 LaTeX 交付（main.tex + 拆章 + BibTeX，含脚本）
+    ├── read-and-express/            # 英语练习，日志留在私有项目（MIT）
     └── zotero-annotations/          # Zotero 批注读取 + 附件拉取（含脚本）
 ```
 
@@ -64,3 +65,7 @@ web_search -> key words for Read-Black for OA get -> OA get (MUST! and MUST para
 4. **依赖**：有第三方依赖的 skill 在 `requirements/` 建对应 `*.txt` 并登记；纯标准库 skill 不建文件。
 5. 新增 skill 时保持单层 `<name>/SKILL.md`；脚本放 `<name>/scripts/`。
 6. **LaTeX 交付物**：`latex-research-writing` 生成的项目（`main.tex`、`chapters/`、`refs.bib`）放在项目根目录（如 `latex-project/`）或用户指定目录，不放 `.agents/`。
+
+## Read and Express
+
+[read-and-express](skills/read-and-express/SKILL.md) 从独立 MIT 仓库单向同步；日志仅存使用方私有项目。不要在本模板或技能 memory 中保存真实练习数据。

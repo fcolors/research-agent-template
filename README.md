@@ -25,7 +25,7 @@ research-agent-template/
     ├── docs/                          # 通用设计/规范
     ├── memory/                        # 私有记忆结构（配置卡/学习卡/武器，模板占位）
     ├── requirements/                  # 第三方依赖清单
-    └── skills/                        # 6 个内置技能
+    └── skills/                        # 7 个内置技能
 ```
 
 ## 内置技能
@@ -38,6 +38,8 @@ research-agent-template/
 | `review-quality-analyzer` | 综述质量提示词工程（子代理 A 分析 + B 反思迭代） | 无 |
 | `latex-research-writing` | 交付极简 LaTeX：main.tex + 按章拆分 + BibTeX 引用管理 + 机器检查；中文默认 `ctex`+`xelatex`，英文 `fontenc`+`pdflatex` | 标准库 |
 | `zotero-annotations` | 读取 Zotero 批注 + 上下文精确定位 + 附件拉取 | PyMuPDF（仅上下文模式） |
+
+| `read-and-express` | 阅读与英语练习：英文回应、中文纠正、私有项目日志恢复（MIT） | 无 |
 
 ## 快速开始
 
