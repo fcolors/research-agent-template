@@ -17,12 +17,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out template
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: main
           path: template
       - name: Check out source skill (read only)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: fcolors/read-and-express
           ref: main
@@ -33,10 +33,20 @@ jobs:
         run: |
           set -eu
           test -s source/skills/read-and-express/SKILL.md
-          test -s source/skills/read-and-express/LICENSE
+          # A standalone skill may inherit its repository's license.
+          if test -s source/skills/read-and-express/LICENSE; then
+            license=source/skills/read-and-express/LICENSE
+          elif test -s source/LICENSE; then
+            license=source/LICENSE
+          else
+            echo "::error::Missing LICENSE in both source/skills/read-and-express/ and source/"
+            exit 1
+          fi
           mkdir -p template/.agents/skills/read-and-express
           rsync -a --delete --exclude='__pycache__/' --exclude='*.pyc' \
             source/skills/read-and-express/ template/.agents/skills/read-and-express/
+          # Copy after rsync --delete so the fallback license is retained.
+          cp "$license" template/.agents/skills/read-and-express/LICENSE
       - name: Commit changed mirror
         working-directory: template
         shell: bash
